@@ -61,11 +61,6 @@ import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
-
-/**
- * Oct 14, 2014
- */
-
 public class QueriesSentinelTest {
   private static final Logger LOGGER = LoggerFactory.getLogger(QueriesSentinelTest.class);
   private static ReduceService<BrokerResponseNative> REDUCE_SERVICE = new BrokerReduceService();
@@ -182,7 +177,7 @@ public class QueriesSentinelTest {
       InstanceRequest instanceRequest = new InstanceRequest(counter++, brokerRequest);
       instanceRequest.setSearchSegments(new ArrayList<String>());
       instanceRequest.getSearchSegments().add(segmentName);
-      QueryRequest queryRequest = new QueryRequest(instanceRequest);
+      QueryRequest queryRequest = new QueryRequest(instanceRequest, TableDataManagerProvider.getServerMetrics());
       final DataTable instanceResponse = QUERY_EXECUTOR.processQuery(queryRequest);
       instanceResponseMap.clear();
       instanceResponseMap.put(new ServerInstance("localhost:0000"), instanceResponse);
@@ -205,7 +200,7 @@ public class QueriesSentinelTest {
       InstanceRequest instanceRequest = new InstanceRequest(counter++, brokerRequest);
       instanceRequest.setSearchSegments(new ArrayList<String>());
       instanceRequest.getSearchSegments().add(segmentName);
-      QueryRequest queryRequest = new QueryRequest(instanceRequest);
+      QueryRequest queryRequest = new QueryRequest(instanceRequest, TableDataManagerProvider.getServerMetrics());
       final DataTable instanceResponse = QUERY_EXECUTOR.processQuery(queryRequest);
       instanceResponseMap.clear();
       instanceResponseMap.put(new ServerInstance("localhost:0000"), instanceResponse);
@@ -311,7 +306,7 @@ public class QueriesSentinelTest {
     InstanceRequest instanceRequest = new InstanceRequest(1, brokerRequest);
     instanceRequest.setSearchSegments(new ArrayList<String>());
     instanceRequest.getSearchSegments().add(segmentName);
-    QueryRequest queryRequest = new QueryRequest(instanceRequest);
+    QueryRequest queryRequest = new QueryRequest(instanceRequest, TableDataManagerProvider.getServerMetrics());
     final DataTable instanceResponse = QUERY_EXECUTOR.processQuery(queryRequest);
     instanceResponseMap.clear();
     instanceResponseMap.put(new ServerInstance("localhost:0000"), instanceResponse);
@@ -328,7 +323,7 @@ public class QueriesSentinelTest {
     InstanceRequest instanceRequest = new InstanceRequest(1, brokerRequest);
     instanceRequest.setSearchSegments(new ArrayList<String>());
     instanceRequest.getSearchSegments().add(segmentName);
-    QueryRequest queryRequest = new QueryRequest(instanceRequest);
+    QueryRequest queryRequest = new QueryRequest(instanceRequest, TableDataManagerProvider.getServerMetrics());
     final DataTable instanceResponse = QUERY_EXECUTOR.processQuery(queryRequest);
     instanceResponseMap.clear();
     instanceResponseMap.put(new ServerInstance("localhost:0000"), instanceResponse);
@@ -351,7 +346,7 @@ public class QueriesSentinelTest {
     InstanceRequest instanceRequest = new InstanceRequest(1, brokerRequest);
     instanceRequest.setSearchSegments(new ArrayList<String>());
     instanceRequest.getSearchSegments().add(segmentName);
-    QueryRequest queryRequest = new QueryRequest(instanceRequest);
+    QueryRequest queryRequest = new QueryRequest(instanceRequest, TableDataManagerProvider.getServerMetrics());
     final DataTable instanceResponse = QUERY_EXECUTOR.processQuery(queryRequest);
     instanceResponseMap.clear();
     instanceResponseMap.put(new ServerInstance("localhost:0000"), instanceResponse);
@@ -372,7 +367,7 @@ public class QueriesSentinelTest {
     instanceRequest.setEnableTrace(true); // TODO: add trace settings consistency
     instanceRequest.setSearchSegments(new ArrayList<String>());
     instanceRequest.getSearchSegments().add(segmentName);
-    QueryRequest queryRequest = new QueryRequest(instanceRequest);
+    QueryRequest queryRequest = new QueryRequest(instanceRequest, TableDataManagerProvider.getServerMetrics());
     final DataTable instanceResponse = QUERY_EXECUTOR.processQuery(queryRequest);
     instanceResponseMap.clear();
     instanceResponseMap.put(new ServerInstance("localhost:0000"), instanceResponse);
