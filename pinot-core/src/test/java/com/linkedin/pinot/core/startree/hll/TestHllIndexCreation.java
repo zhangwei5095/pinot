@@ -20,7 +20,7 @@ import com.linkedin.pinot.common.segment.ReadMode;
 import com.linkedin.pinot.core.common.DataFetcher;
 import com.linkedin.pinot.core.indexsegment.IndexSegment;
 import com.linkedin.pinot.core.indexsegment.generator.SegmentVersion;
-import com.linkedin.pinot.core.operator.aggregation.SingleValueBlockCache;
+import com.linkedin.pinot.core.operator.aggregation.SingleMultiValueBlockCache;
 import com.linkedin.pinot.core.segment.creator.SegmentIndexCreationDriver;
 import com.linkedin.pinot.core.segment.creator.impl.V1Constants;
 import com.linkedin.pinot.core.segment.index.SegmentMetadataImpl;
@@ -127,7 +127,7 @@ public class TestHllIndexCreation {
       for (int i = 0; i < maxDocLength; i++) {
         docIdSet[i] = i;
       }
-      SingleValueBlockCache blockCache = new SingleValueBlockCache(new DataFetcher(indexSegment));
+      SingleMultiValueBlockCache blockCache = new SingleMultiValueBlockCache(new DataFetcher(indexSegment));
       blockCache.initNewBlock(docIdSet, 0, maxDocLength);
 
       String[] strings = blockCache.getStringValueArrayForColumn("column1_hll");

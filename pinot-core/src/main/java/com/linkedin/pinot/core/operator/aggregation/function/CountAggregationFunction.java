@@ -15,10 +15,11 @@
  */
 package com.linkedin.pinot.core.operator.aggregation.function;
 
+import java.util.List;
+
 import com.google.common.base.Preconditions;
 import com.linkedin.pinot.core.operator.aggregation.AggregationResultHolder;
 import com.linkedin.pinot.core.operator.aggregation.groupby.GroupByResultHolder;
-import java.util.List;
 
 
 /**
@@ -45,6 +46,29 @@ public class CountAggregationFunction implements AggregationFunction {
     Preconditions.checkArgument(valueArray.length == 0);
 
     resultHolder.setValue(resultHolder.getDoubleResult() + length);
+  }
+
+  /**
+   * Performs 'count' aggregation on the input array.
+   * Returns {@value #DEFAULT_VALUE} if the input array is empty.
+   *
+   * {@inheritDoc}
+   *
+   * @param length
+   * @param resultHolder
+   * @param valueArrayArray
+   */
+  @Override
+  public void aggregateMV(int length, AggregationResultHolder resultHolder, Object... valueArrayArray) {
+    Preconditions.checkArgument(valueArrayArray.length == 1);
+    Preconditions.checkArgument(valueArrayArray[0] instanceof double[][]);
+    final double[][] values = (double[][]) valueArrayArray[0];
+    Preconditions.checkState(length <= values.length);
+    int cnt = 0;
+    for (int i = 0; i < length; i++) {
+      cnt += values[i].length;
+    }
+    resultHolder.setValue(resultHolder.getDoubleResult() + cnt);
   }
 
   /**

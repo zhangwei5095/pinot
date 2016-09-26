@@ -60,6 +60,35 @@ public class DistinctCountHLLAggregationFunction implements AggregationFunction 
   }
 
   /**
+   * Performs 'distinctcounthll' aggregation on the input array.
+   *
+   * {@inheritDoc}
+   *
+   * @param length
+   * @param resultHolder
+   * @param valueArrayArray
+   */
+  @Override
+  public void aggregateMV(int length, AggregationResultHolder resultHolder, Object... valueArray) {
+    Preconditions.checkArgument(valueArray.length == 1);
+    Preconditions.checkArgument(valueArray[0] instanceof double[][]);
+    final double[][] values = (double[][]) valueArray[0];
+    Preconditions.checkState(length <= values.length);
+
+    HyperLogLog hll = resultHolder.getResult();
+    if (hll == null) {
+      hll = new HyperLogLog(log2m);
+      resultHolder.setValue(hll);
+    }
+
+    for (int i = 0; i < length; i++) {
+      for (int j = 0; j < values[i].length; ++j) {
+        hll.offer((int) values[i][j]);
+      }
+    }
+  }
+
+  /**
    * {@inheritDoc}
    *
    * While the interface allows for variable number of valueArrays, we do not support
@@ -73,6 +102,14 @@ public class DistinctCountHLLAggregationFunction implements AggregationFunction 
   @Override
   public void aggregateGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray.length == 1);
+    if (valueArray[0] instanceof double[][]) {
+      aggregateMVGroupBySV(length, groupKeys, resultHolder, valueArray);
+    } else {
+      aggregateSVGroupBySV(length, groupKeys, resultHolder, valueArray);
+    }
+  }
+
+  private void aggregateSVGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray[0] instanceof double[]);
     final double[] values = (double[]) valueArray[0];
     Preconditions.checkState(length <= values.length);
@@ -88,6 +125,22 @@ public class DistinctCountHLLAggregationFunction implements AggregationFunction 
     }
   }
 
+  private void aggregateMVGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
+    final double[][] values = (double[][]) valueArray[0];
+    Preconditions.checkState(length <= values.length);
+    for (int i = 0; i < length; i++) {
+      int groupKey = groupKeys[i];
+      HyperLogLog hll = resultHolder.getResult(groupKey);
+      if (hll == null) {
+        hll = new HyperLogLog(log2m);
+        resultHolder.setValueForKey(groupKey, hll);
+      }
+      for (double value : values[i]) {
+        hll.offer((int) value);
+      }
+    }
+  }
+
   /**
    * {@inheritDoc}
    *
@@ -100,6 +153,14 @@ public class DistinctCountHLLAggregationFunction implements AggregationFunction 
   public void aggregateGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder,
       Object... valueArray) {
     Preconditions.checkArgument(valueArray.length == 1);
+    if (valueArray[0] instanceof double[][]) {
+      aggregateMVGroupByMV(length, docIdToGroupKeys, resultHolder, valueArray);
+    } else {
+      aggregateSVGroupByMV(length, docIdToGroupKeys, resultHolder, valueArray);
+    }
+  }
+
+  private void aggregateSVGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray[0] instanceof double[]);
     final double[] values = (double[]) valueArray[0];
     Preconditions.checkState(length <= values.length);
@@ -113,6 +174,23 @@ public class DistinctCountHLLAggregationFunction implements AggregationFunction 
           resultHolder.setValueForKey(groupKey, hll);
         }
         hll.offer(value);
+      }
+    }
+  }
+
+  private void aggregateMVGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
+    final double[][] values = (double[][]) valueArray[0];
+    Preconditions.checkState(length <= values.length);
+    for (int i = 0; i < length; i++) {
+      for (int groupKey : docIdToGroupKeys[i]) {
+        HyperLogLog hll = resultHolder.getResult(groupKey);
+        if (hll == null) {
+          hll = new HyperLogLog(log2m);
+          resultHolder.setValueForKey(groupKey, hll);
+        }
+        for (double value : values[i]) {
+          hll.offer((int) value);
+        }
       }
     }
   }

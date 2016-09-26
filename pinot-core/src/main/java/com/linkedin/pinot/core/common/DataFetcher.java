@@ -15,10 +15,12 @@
  */
 package com.linkedin.pinot.core.common;
 
-import com.linkedin.pinot.core.indexsegment.IndexSegment;
-import com.linkedin.pinot.core.segment.index.readers.Dictionary;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+
+import com.linkedin.pinot.core.indexsegment.IndexSegment;
+import com.linkedin.pinot.core.segment.index.readers.Dictionary;
 
 
 /**
@@ -91,6 +93,16 @@ public class DataFetcher {
   }
 
   /**
+   * Given a column, check if it's a single value column or not.
+   * 
+   * @param column column name.
+   * @return whether given column is single value column, false otherwise.
+   */
+  public boolean isSingleValueColumn(String column) {
+    return getDataSourceForColumn(column).getDataSourceMetadata().isSingleValue();
+  }
+
+  /**
    * Fetch the dictionary Ids for a single value column.
    *
    * @param column column name.
@@ -104,6 +116,42 @@ public class DataFetcher {
       int outStartPos) {
     BlockValSet blockValSet = getBlockValSetForColumn(column);
     blockValSet.readIntValues(inDocIds, inStartPos, length, outDictIds, outStartPos);
+  }
+
+  /**
+   * Fetch the dictionary Ids for a multi value column.
+   *
+   * @param column column name.
+   * @param inDocIds document Id array.
+   * @param inStartPos input start position.
+   * @param length input length.
+   * @param outDictIdsArray dictionary Id array array buffer.
+   * @param outStartPos output start position.
+   */
+  public void fetchMultiValueDictIds(String column, int[] inDocIds, int inStartPos, int length, int[][] outDictIdsArray,
+      int outStartPos) {
+    BlockMultiValIterator iterator = (BlockMultiValIterator) getBlockValSetForColumn(column).iterator();
+    int maxNumberOfEntries = getMaxNumberOfEntriesForColumn(column);
+    int[] dictIdArray = new int[maxNumberOfEntries];
+    for (int i = inStartPos; i < inStartPos + length; ++i) {
+      iterator.skipTo(inDocIds[i]);
+      int dictIdLength = iterator.nextIntVal(dictIdArray);
+      outDictIdsArray[outStartPos++] = Arrays.copyOfRange(dictIdArray, 0, dictIdLength);
+
+      if (dictIdLength == 0 ) { 
+        System.out.println("DataFecther.fetchMultiValueDictIds(): dictIdLength = 0,  outDictIdsArray[outStartPos] = " +  outDictIdsArray[outStartPos - 1]);
+      }
+    }
+  }
+
+  /**
+   * For a given multi-value column, trying to get the max number of
+   * entries per row.
+   * @param column
+   * @return max number of entries for a given column.
+   */
+  public int getMaxNumberOfEntriesForColumn(String column) {
+    return getDataSourceForColumn(column).nextBlock(BLOCK_ZERO).getMetadata().getMaxNumberOfMultiValues();
   }
 
   /**

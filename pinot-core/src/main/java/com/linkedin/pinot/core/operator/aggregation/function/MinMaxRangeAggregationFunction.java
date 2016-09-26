@@ -73,6 +73,51 @@ public class MinMaxRangeAggregationFunction implements AggregationFunction {
   }
 
   /**
+   * Performs 'minmaxrange' aggregation on the input array.
+   *
+   * {@inheritDoc}
+   *
+   * @param length
+   * @param resultHolder
+   * @param valueArrayArray
+   */
+  @Override
+  public void aggregateMV(int length, AggregationResultHolder resultHolder, Object... valueArrayArray) {
+    Preconditions.checkArgument(valueArrayArray.length == 1);
+    Preconditions.checkArgument(valueArrayArray[0] instanceof double[][]);
+    final double[][] values = (double[][]) valueArrayArray[0];
+    Preconditions.checkState(length <= values.length);
+
+    double min = Double.POSITIVE_INFINITY;
+    double max = Double.NEGATIVE_INFINITY;
+
+    for (int i = 0; i < length; i++) {
+      for (int j = 0; j < values[i].length; ++j) {
+        double value = values[i][j];
+        if (value < min) {
+          min = value;
+        }
+        if (value > max) {
+          max = value;
+        }
+      }
+    }
+
+    Pair<Double, Double> rangeValue = resultHolder.getResult();
+    if (rangeValue == null) {
+      rangeValue = new Pair<>(min, max);
+      resultHolder.setValue(rangeValue);
+    } else {
+      if (min < rangeValue.getFirst()) {
+        rangeValue.setFirst(min);
+      }
+      if (max > rangeValue.getSecond()) {
+        rangeValue.setSecond(max);
+      }
+    }
+  }
+
+  /**
    * {@inheritDoc}
    *
    * While the interface allows for variable number of valueArrays, we do not support
@@ -86,6 +131,14 @@ public class MinMaxRangeAggregationFunction implements AggregationFunction {
   @Override
   public void aggregateGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray.length == 1);
+    if (valueArray[0] instanceof double[][]) {
+      aggregateMVGroupBySV(length, groupKeys, resultHolder, valueArray);
+    } else {
+      aggregateSVGroupBySV(length, groupKeys, resultHolder, valueArray);
+    }
+  }
+
+  private void aggregateSVGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray[0] instanceof double[]);
     final double[] values = (double[]) valueArray[0];
     Preconditions.checkState(length <= values.length);
@@ -108,6 +161,29 @@ public class MinMaxRangeAggregationFunction implements AggregationFunction {
     }
   }
 
+  private void aggregateMVGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
+    final double[][] values = (double[][]) valueArray[0];
+    Preconditions.checkState(length <= values.length);
+
+    for (int i = 0; i < length; i++) {
+      int groupKey = groupKeys[i];
+      for (double value : values[i]) {
+        Pair<Double, Double> rangeValue = resultHolder.getResult(groupKey);
+        if (rangeValue == null) {
+          rangeValue = new Pair<>(value, value);
+          resultHolder.setValueForKey(groupKey, rangeValue);
+        } else {
+          if (value < rangeValue.getFirst()) {
+            rangeValue.setFirst(value);
+          }
+          if (value > rangeValue.getSecond()) {
+            rangeValue.setSecond(value);
+          }
+        }
+      }
+    }
+  }
+
   /**
    * {@inheritDoc}
    *
@@ -120,6 +196,14 @@ public class MinMaxRangeAggregationFunction implements AggregationFunction {
   public void aggregateGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder,
       Object... valueArray) {
     Preconditions.checkArgument(valueArray.length == 1);
+    if (valueArray[0] instanceof double[][]) {
+      aggregateMVGroupByMV(length, docIdToGroupKeys, resultHolder, valueArray);
+    } else {
+      aggregateSVGroupByMV(length, docIdToGroupKeys, resultHolder, valueArray);
+    }
+  }
+
+  private void aggregateSVGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray[0] instanceof double[]);
     final double[] values = (double[]) valueArray[0];
     Preconditions.checkState(length <= values.length);
@@ -137,6 +221,29 @@ public class MinMaxRangeAggregationFunction implements AggregationFunction {
           }
           if (value > rangeValue.getSecond()) {
             rangeValue.setSecond(value);
+          }
+        }
+      }
+    }
+  }
+
+  private void aggregateMVGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
+    final double[][] values = (double[][]) valueArray[0];
+    Preconditions.checkState(length <= values.length);
+    for (int i = 0; i < length; ++i) {
+      for (double value : values[i]) {
+        for (int groupKey : docIdToGroupKeys[i]) {
+          Pair<Double, Double> rangeValue = resultHolder.getResult(groupKey);
+          if (rangeValue == null) {
+            rangeValue = new Pair<>(value, value);
+            resultHolder.setValueForKey(groupKey, rangeValue);
+          } else {
+            if (value < rangeValue.getFirst()) {
+              rangeValue.setFirst(value);
+            }
+            if (value > rangeValue.getSecond()) {
+              rangeValue.setSecond(value);
+            }
           }
         }
       }

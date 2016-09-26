@@ -65,6 +65,44 @@ public class AvgAggregationFunction implements AggregationFunction {
   }
 
   /**
+   * Performs 'avg' aggregation on the input array.
+   * Returns {@value #DEFAULT_VALUE} if the input array is empty.
+   *
+   * While the interface allows for variable number of valueArrays, we do not support
+   * multiple columns within one aggregation function right now.
+   *
+   * {@inheritDoc}
+   *
+   * @param length
+   * @param resultHolder
+   * @param valueArrayArray
+   */
+  @Override
+  public void aggregateMV(int length, AggregationResultHolder resultHolder, Object... valueArrayArray) {
+    Preconditions.checkArgument(valueArrayArray.length == 1);
+    Preconditions.checkArgument(valueArrayArray[0] instanceof double[][]);
+    final double[][] values = (double[][]) valueArrayArray[0];
+    Preconditions.checkState(length <= values.length);
+
+    double sum = 0.0;
+    int cnt = 0;
+    for (int i = 0; i < length; ++i) {
+      for (int j = 0; j < values[i].length; ++j) {
+        sum += values[i][j];
+      }
+      cnt += values[i].length;
+    }
+    Pair<Double, Long> avgValue = resultHolder.getResult();
+    if (avgValue == null) {
+      avgValue = new Pair<>(sum, (long) cnt);
+      resultHolder.setValue(avgValue);
+    } else {
+      avgValue.setFirst(avgValue.getFirst() + sum);
+      avgValue.setSecond(avgValue.getSecond() + cnt);
+    }
+  }
+
+  /**
    * {@inheritDoc}
    *
    * While the interface allows for variable number of valueArrays, we do not support
@@ -78,6 +116,14 @@ public class AvgAggregationFunction implements AggregationFunction {
   @Override
   public void aggregateGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray.length == 1);
+    if (valueArray[0] instanceof double[][]) {
+      aggregateMVGroupBySV(length, groupKeys, resultHolder, valueArray);
+    } else {
+      aggregateSVGroupBySV(length, groupKeys, resultHolder, valueArray);
+    }
+  }
+
+  private void aggregateSVGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray[0] instanceof double[]);
     final double[] values = (double[]) valueArray[0];
     Preconditions.checkState(length <= values.length);
@@ -96,6 +142,25 @@ public class AvgAggregationFunction implements AggregationFunction {
     }
   }
 
+  private void aggregateMVGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
+    final double[][] values = (double[][]) valueArray[0];
+    Preconditions.checkState(length <= values.length);
+
+    for (int i = 0; i < length; ++i) {
+      int groupKey = groupKeys[i];
+      for (double value : values[i]) {
+        Pair<Double, Long> avgValue = resultHolder.getResult(groupKey);
+        if (avgValue == null) {
+          avgValue = new Pair<>(value, 1L);
+          resultHolder.setValueForKey(groupKey, avgValue);
+        } else {
+          avgValue.setFirst(avgValue.getFirst() + value);
+          avgValue.setSecond(avgValue.getSecond() + 1);
+        }
+      }
+    }
+  }
+
   /**
    * {@inheritDoc}
    *
@@ -108,6 +173,14 @@ public class AvgAggregationFunction implements AggregationFunction {
   public void aggregateGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder,
       Object... valueArray) {
     Preconditions.checkArgument(valueArray.length == 1);
+    if (valueArray[0] instanceof double[][]) {
+      aggregateMVGroupByMV(length, docIdToGroupKeys, resultHolder, valueArray);
+    } else {
+      aggregateSVGroupByMV(length, docIdToGroupKeys, resultHolder, valueArray);
+    }
+  }
+
+  private void aggregateSVGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray[0] instanceof double[]);
     final double[] values = (double[]) valueArray[0];
     Preconditions.checkState(length <= values.length);
@@ -122,6 +195,25 @@ public class AvgAggregationFunction implements AggregationFunction {
         } else {
           avgValue.setFirst(avgValue.getFirst() + values[i]);
           avgValue.setSecond(avgValue.getSecond() + 1);
+        }
+      }
+    }
+  }
+
+  private void aggregateMVGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
+    final double[][] values = (double[][]) valueArray[0];
+    Preconditions.checkState(length <= values.length);
+    for (int i = 0; i < length; ++i) {
+      for (int groupKey : docIdToGroupKeys[i]) {
+        Pair<Double, Long> avgValue = resultHolder.getResult(groupKey);
+        for (double value : values[i]) {
+          if (avgValue == null) {
+            avgValue = new Pair<>(value, 1L);
+            resultHolder.setValueForKey(groupKey, avgValue);
+          } else {
+            avgValue.setFirst(avgValue.getFirst() + value);
+            avgValue.setSecond(avgValue.getSecond() + 1);
+          }
         }
       }
     }

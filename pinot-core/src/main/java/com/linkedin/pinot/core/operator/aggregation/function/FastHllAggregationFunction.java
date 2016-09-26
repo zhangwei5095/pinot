@@ -70,6 +70,12 @@ public class FastHllAggregationFunction implements AggregationFunction {
     }
   }
 
+  @Override
+  public void aggregateMV(int length, AggregationResultHolder resultHolder, Object... valueArrayArray) {
+    throw new RuntimeException(
+        "Unsupported method aggregateMV(int length, AggregationResultHolder resultHolder, Object... valueArrayArray) for class " + getClass().getName());
+  }
+
   /**
    * {@inheritDoc}
    *

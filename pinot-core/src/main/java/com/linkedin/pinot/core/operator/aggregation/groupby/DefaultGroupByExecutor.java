@@ -23,7 +23,7 @@ import com.linkedin.pinot.core.common.DataFetcher;
 import com.linkedin.pinot.core.indexsegment.IndexSegment;
 import com.linkedin.pinot.core.operator.aggregation.AggregationFunctionContext;
 import com.linkedin.pinot.core.operator.aggregation.ResultHolderFactory;
-import com.linkedin.pinot.core.operator.aggregation.SingleValueBlockCache;
+import com.linkedin.pinot.core.operator.aggregation.SingleMultiValueBlockCache;
 import com.linkedin.pinot.core.operator.aggregation.function.AggregationFunction;
 import com.linkedin.pinot.core.operator.aggregation.function.AggregationFunctionFactory;
 import com.linkedin.pinot.core.plan.DocIdSetPlanNode;
@@ -38,7 +38,7 @@ import java.util.List;
  * - Single/Multi valued columns.
  */
 public class DefaultGroupByExecutor implements GroupByExecutor {
-  private final SingleValueBlockCache _singleValueBlockCache;
+  private final SingleMultiValueBlockCache _singleValueBlockCache;
 
   private final GroupKeyGenerator _groupKeyGenerator;
   private final int _numAggrFunc;
@@ -67,7 +67,7 @@ public class DefaultGroupByExecutor implements GroupByExecutor {
     Preconditions.checkNotNull(groupBy);
 
     DataFetcher dataFetcher = new DataFetcher(indexSegment);
-    _singleValueBlockCache = new SingleValueBlockCache(dataFetcher);
+    _singleValueBlockCache = new SingleMultiValueBlockCache(dataFetcher);
     List<String> groupByColumnList = groupBy.getColumns();
     String[] groupByColumns = groupByColumnList.toArray(new String[groupByColumnList.size()]);
     _groupKeyGenerator = new DefaultGroupKeyGenerator(dataFetcher, groupByColumns);
@@ -149,7 +149,10 @@ public class DefaultGroupByExecutor implements GroupByExecutor {
 
     Preconditions.checkState(aggrColumns.length == 1);
     String aggrColumn = aggrColumns[0];
-
+    boolean isAggrColumnsingleValueField = true;
+    if (_segmentMetadata.getSchema().hasColumn(aggrColumn)) {
+      isAggrColumnsingleValueField = _segmentMetadata.getSchema().getFieldSpecFor(aggrColumn).isSingleValueField();
+    }
     switch (aggrFuncName) {
       case AggregationFunctionFactory.COUNT_AGGREGATION_FUNCTION:
         if (_hasMultiValuedColumns) {
@@ -161,16 +164,26 @@ public class DefaultGroupByExecutor implements GroupByExecutor {
 
       case AggregationFunctionFactory.DISTINCTCOUNT_AGGREGATION_FUNCTION:
       case AggregationFunctionFactory.DISTINCTCOUNTHLL_AGGREGATION_FUNCTION:
-        double[] hashCodeArray = _singleValueBlockCache.getHashCodeArrayForColumn(aggrColumn);
-        if (_hasMultiValuedColumns) {
-          aggregationFunction.aggregateGroupByMV(length, _docIdToMVGroupKey, resultHolder, (Object) hashCodeArray);
+        Object hashCodeArray;
+        if (isAggrColumnsingleValueField) {
+          hashCodeArray = _singleValueBlockCache.getHashCodeArrayForColumn(aggrColumn);
         } else {
-          aggregationFunction.aggregateGroupBySV(length, _docIdToSVGroupKey, resultHolder, (Object) hashCodeArray);
+          hashCodeArray = _singleValueBlockCache.getHashCodeArrayArrayForColumn(aggrColumn);
+        }
+        if (_hasMultiValuedColumns) {
+          aggregationFunction.aggregateGroupByMV(length, _docIdToMVGroupKey, resultHolder, hashCodeArray);
+        } else {
+          aggregationFunction.aggregateGroupBySV(length, _docIdToSVGroupKey, resultHolder, hashCodeArray);
         }
         break;
 
       case AggregationFunctionFactory.FASTHLL_AGGREGATION_FUNCTION:
-        String[] stringArray = _singleValueBlockCache.getStringValueArrayForColumn(aggrColumn);
+        Object stringArray;
+        if (isAggrColumnsingleValueField) {
+          stringArray = _singleValueBlockCache.getStringValueArrayForColumn(aggrColumn);
+        } else {
+          stringArray = _singleValueBlockCache.getStringValueArrayArrayForColumn(aggrColumn);
+        }
         if (_hasMultiValuedColumns) {
           aggregationFunction.aggregateGroupByMV(length, _docIdToMVGroupKey, resultHolder, (Object) stringArray);
         } else {
@@ -179,7 +192,13 @@ public class DefaultGroupByExecutor implements GroupByExecutor {
         break;
 
       default:
-        double[] valueArray = _singleValueBlockCache.getDoubleValueArrayForColumn(aggrColumn);
+        Object valueArray;
+        if (isAggrColumnsingleValueField) {
+          valueArray = _singleValueBlockCache.getDoubleValueArrayForColumn(aggrColumn);
+        } else {
+          valueArray = _singleValueBlockCache.getDoubleValueArrayArrayForColumn(aggrColumn);
+        }
+
         if (_hasMultiValuedColumns) {
           aggregationFunction.aggregateGroupByMV(length, _docIdToMVGroupKey, resultHolder, (Object) valueArray);
         } else {

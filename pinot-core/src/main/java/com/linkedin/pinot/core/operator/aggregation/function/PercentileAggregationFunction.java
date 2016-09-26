@@ -78,6 +78,35 @@ public class PercentileAggregationFunction implements AggregationFunction {
   }
 
   /**
+   * Performs 'percentile' aggregation on the input array.
+   *
+   * {@inheritDoc}
+   *
+   * @param length
+   * @param resultHolder
+   * @param valueArrayArray
+   */
+  @Override
+  public void aggregateMV(int length, AggregationResultHolder resultHolder, Object... valueArrayArray) {
+    Preconditions.checkArgument(valueArrayArray.length == 1);
+    Preconditions.checkArgument(valueArrayArray[0] instanceof double[][]);
+    final double[][] values = (double[][]) valueArrayArray[0];
+    Preconditions.checkState(length <= values.length);
+
+    DoubleArrayList valueList = resultHolder.getResult();
+    if (valueList == null) {
+      valueList = new DoubleArrayList();
+      resultHolder.setValue(valueList);
+    }
+
+    for (int i = 0; i < length; i++) {
+      for (int j = 0; j < values[i].length; ++j) {
+        valueList.add(values[i][j]);
+      }
+    }
+  }
+
+  /**
    * {@inheritDoc}
    *
    * While the interface allows for variable number of valueArrays, we do not support
@@ -91,6 +120,14 @@ public class PercentileAggregationFunction implements AggregationFunction {
   @Override
   public void aggregateGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray.length == 1);
+    if (valueArray[0] instanceof double[][]) {
+      aggregateMVGroupBySV(length, groupKeys, resultHolder, valueArray);
+    } else {
+      aggregateSVGroupBySV(length, groupKeys, resultHolder, valueArray);
+    }
+  }
+
+  private void aggregateSVGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray[0] instanceof double[]);
     final double[] values = (double[]) valueArray[0];
     Preconditions.checkState(length <= values.length);
@@ -106,6 +143,23 @@ public class PercentileAggregationFunction implements AggregationFunction {
     }
   }
 
+  private void aggregateMVGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
+    final double[][] values = (double[][]) valueArray[0];
+    Preconditions.checkState(length <= values.length);
+
+    for (int i = 0; i < length; i++) {
+      int groupKey = groupKeys[i];
+      DoubleArrayList valueList = resultHolder.getResult(groupKey);
+      if (valueList == null) {
+        valueList = new DoubleArrayList();
+        resultHolder.setValueForKey(groupKey, valueList);
+      }
+      for (double value : values[i]) {
+        valueList.add(value);
+      }
+    }
+  }
+
   /**
    * {@inheritDoc}
    *
@@ -118,6 +172,14 @@ public class PercentileAggregationFunction implements AggregationFunction {
   public void aggregateGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder,
       Object... valueArray) {
     Preconditions.checkArgument(valueArray.length == 1);
+    if (valueArray[0] instanceof double[][]) {
+      aggregateMVGroupByMV(length, docIdToGroupKeys, resultHolder, valueArray);
+    } else {
+      aggregateSVGroupByMV(length, docIdToGroupKeys, resultHolder, valueArray);
+    }
+  }
+
+  private void aggregateSVGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray[0] instanceof double[]);
     final double[] values = (double[]) valueArray[0];
     Preconditions.checkState(length <= values.length);
@@ -131,6 +193,23 @@ public class PercentileAggregationFunction implements AggregationFunction {
           resultHolder.setValueForKey(groupKey, valueList);
         }
         valueList.add(value);
+      }
+    }
+  }
+
+  private void aggregateMVGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
+    final double[][] values = (double[][]) valueArray[0];
+    Preconditions.checkState(length <= values.length);
+    for (int i = 0; i < length; ++i) {
+      for (double value : values[i]) {
+        for (int groupKey : docIdToGroupKeys[i]) {
+          DoubleArrayList valueList = resultHolder.getResult(groupKey);
+          if (valueList == null) {
+            valueList = new DoubleArrayList();
+            resultHolder.setValueForKey(groupKey, valueList);
+          }
+          valueList.add(value);
+        }
       }
     }
   }

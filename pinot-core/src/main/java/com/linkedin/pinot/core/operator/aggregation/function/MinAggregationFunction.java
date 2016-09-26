@@ -15,10 +15,11 @@
  */
 package com.linkedin.pinot.core.operator.aggregation.function;
 
+import java.util.List;
+
 import com.google.common.base.Preconditions;
 import com.linkedin.pinot.core.operator.aggregation.AggregationResultHolder;
 import com.linkedin.pinot.core.operator.aggregation.groupby.GroupByResultHolder;
-import java.util.List;
 
 
 /**
@@ -62,6 +63,40 @@ public class MinAggregationFunction implements AggregationFunction {
   }
 
   /**
+   * Performs 'min' aggregation function on the input array.
+   * Returns {@value #DEFAULT_VALUE} if input array is empty.
+   *
+   * While the interface allows for variable number of valueArrays, we do not support
+   * multiple columns within one aggregation function right now.
+   *
+   * {@inheritDoc}
+   *
+   * @param length
+   * @param resultHolder
+   * @param valueArrayArray
+   */
+  @Override
+  public void aggregateMV(int length, AggregationResultHolder resultHolder, Object... valueArrayArray) {
+    Preconditions.checkArgument(valueArrayArray.length == 1);
+    Preconditions.checkArgument(valueArrayArray[0] instanceof double[][]);
+    final double[][] values = (double[][]) valueArrayArray[0];
+    Preconditions.checkState(length <= values.length);
+
+    double min = DEFAULT_VALUE;
+    for (int i = 0; i < length; i++) {
+      for (int j = 0; j < values[i].length; ++j) {
+        if (values[i][j] < min) {
+          min = values[i][j];
+        }
+      }
+    }
+    double oldValue = resultHolder.getDoubleResult();
+    if (min < oldValue) {
+      resultHolder.setValue(min);
+    }
+  }
+
+  /**
    * {@inheritDoc}
    * While the interface allows for variable number of valueArrays, we do not support
    * multiple columns within one aggregation function right now.
@@ -74,6 +109,14 @@ public class MinAggregationFunction implements AggregationFunction {
   @Override
   public void aggregateGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray.length == 1);
+    if (valueArray[0] instanceof double[][]) {
+      aggregateMVGroupBySV(length, groupKeys, resultHolder, valueArray);
+    } else {
+      aggregateSVGroupBySV(length, groupKeys, resultHolder, valueArray);
+    }
+  }
+
+  private void aggregateSVGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray[0] instanceof double[]);
     final double[] values = (double[]) valueArray[0];
     Preconditions.checkState(length <= values.length);
@@ -83,6 +126,20 @@ public class MinAggregationFunction implements AggregationFunction {
       double oldValue = resultHolder.getDoubleResult(groupKey);
       if (values[i] < oldValue) {
         resultHolder.setValueForKey(groupKey, values[i]);
+      }
+    }
+  }
+
+  private void aggregateMVGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
+    final double[][] values = (double[][]) valueArray[0];
+    Preconditions.checkState(length <= values.length);
+    for (int i = 0; i < length; i++) {
+      int groupKey = groupKeys[i];
+      double oldValue = resultHolder.getDoubleResult(groupKey);
+      for (double value : values[i]) {
+        if (value < oldValue) {
+          resultHolder.setValueForKey(groupKey, value);
+        }
       }
     }
   }
@@ -99,6 +156,14 @@ public class MinAggregationFunction implements AggregationFunction {
   public void aggregateGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder,
       Object... valueArray) {
     Preconditions.checkArgument(valueArray.length == 1);
+    if (valueArray[0] instanceof double[][]) {
+      aggregateMVGroupByMV(length, docIdToGroupKeys, resultHolder, valueArray);
+    } else {
+      aggregateSVGroupByMV(length, docIdToGroupKeys, resultHolder, valueArray);
+    }
+  }
+
+  private void aggregateSVGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray[0] instanceof double[]);
     final double[] values = (double[]) valueArray[0];
     Preconditions.checkState(length <= values.length);
@@ -108,6 +173,21 @@ public class MinAggregationFunction implements AggregationFunction {
         double oldValue = resultHolder.getDoubleResult(groupKey);
         if (values[i] < oldValue) {
           resultHolder.setValueForKey(groupKey, values[i]);
+        }
+      }
+    }
+  }
+
+  private void aggregateMVGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
+    final double[][] values = (double[][]) valueArray[0];
+    Preconditions.checkState(length <= values.length);
+    for (int i = 0; i < length; ++i) {
+      for (int groupKey : docIdToGroupKeys[i]) {
+        double oldValue = resultHolder.getDoubleResult(groupKey);
+        for (double value : values[i]) {
+          if (value < oldValue) {
+            resultHolder.setValueForKey(groupKey, value);
+          }
         }
       }
     }

@@ -42,7 +42,7 @@ import java.util.List;
  * aggregations.
  */
 public class DefaultAggregationExecutor implements AggregationExecutor {
-  private final SingleValueBlockCache _singleValueBlockCache;
+  private final SingleMultiValueBlockCache _singleValueBlockCache;
   private final int _numAggrFunc;
   private final AggregationFunctionContext[] _aggrFuncContextArray;
 
@@ -58,7 +58,7 @@ public class DefaultAggregationExecutor implements AggregationExecutor {
     Preconditions.checkNotNull(aggregationInfoList);
     Preconditions.checkArgument(aggregationInfoList.size() > 0);
 
-    _singleValueBlockCache = new SingleValueBlockCache(new DataFetcher(indexSegment));
+    _singleValueBlockCache = new SingleMultiValueBlockCache(new DataFetcher(indexSegment));
     _numAggrFunc = aggregationInfoList.size();
     _aggrFuncContextArray = new AggregationFunctionContext[_numAggrFunc];
     _segmentMetadata = indexSegment.getSegmentMetadata();
@@ -124,7 +124,10 @@ public class DefaultAggregationExecutor implements AggregationExecutor {
 
     Preconditions.checkState(aggrColumns.length == 1);
     String aggrColumn = aggrColumns[0];
-
+    boolean isAggrColumnSingleValueField = true;
+    if (_segmentMetadata.getSchema().hasColumn(aggrColumn)) {
+      isAggrColumnSingleValueField = _segmentMetadata.getSchema().getFieldSpecFor(aggrColumn).isSingleValueField();
+    }
     switch (aggrFuncName) {
       case AggregationFunctionFactory.COUNT_AGGREGATION_FUNCTION:
         aggregationFunction.aggregate(length, resultHolder);
@@ -132,8 +135,13 @@ public class DefaultAggregationExecutor implements AggregationExecutor {
 
       case AggregationFunctionFactory.DISTINCTCOUNT_AGGREGATION_FUNCTION:
       case AggregationFunctionFactory.DISTINCTCOUNTHLL_AGGREGATION_FUNCTION:
-        aggregationFunction.aggregate(length, resultHolder,
-            (Object) _singleValueBlockCache.getHashCodeArrayForColumn(aggrColumn));
+        if (isAggrColumnSingleValueField) {
+          aggregationFunction.aggregate(length, resultHolder,
+              (Object) _singleValueBlockCache.getHashCodeArrayForColumn(aggrColumn));
+        } else {
+          aggregationFunction.aggregateMV(length, resultHolder,
+              (Object) _singleValueBlockCache.getHashCodeArrayArrayForColumn(aggrColumn));
+        }
         break;
 
       case AggregationFunctionFactory.FASTHLL_AGGREGATION_FUNCTION:
@@ -142,8 +150,13 @@ public class DefaultAggregationExecutor implements AggregationExecutor {
         break;
 
       default:
-        aggregationFunction.aggregate(length, resultHolder,
-            (Object) _singleValueBlockCache.getDoubleValueArrayForColumn(aggrColumn));
+        if (isAggrColumnSingleValueField) {
+          aggregationFunction.aggregate(length, resultHolder,
+              (Object) _singleValueBlockCache.getDoubleValueArrayForColumn(aggrColumn));
+        } else {
+          aggregationFunction.aggregateMV(length, resultHolder,
+              (Object) _singleValueBlockCache.getDoubleValueArrayArrayForColumn(aggrColumn));
+        }
         break;
     }
   }

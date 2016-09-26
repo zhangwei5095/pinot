@@ -15,20 +15,21 @@
  */
 package com.linkedin.pinot.core.operator.aggregation;
 
-import com.linkedin.pinot.core.common.DataFetcher;
-import com.linkedin.pinot.core.plan.DocIdSetPlanNode;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import com.linkedin.pinot.core.common.DataFetcher;
+import com.linkedin.pinot.core.plan.DocIdSetPlanNode;
+
 
 /**
- * This class serves as a single value column block level cache. Using this class can prevent fetching the same column
+ * This class serves as a single/multi value column block level cache. Using this class can prevent fetching the same column
  * data multiple times. This class allocate resources on demand, and reuse them as much as possible to prevent garbage
  * collection.
  */
-public class SingleValueBlockCache {
+public class SingleMultiValueBlockCache {
   private final DataFetcher _dataFetcher;
 
   /** _columnXXLoaded must be cleared in initNewBlock */
@@ -43,6 +44,11 @@ public class SingleValueBlockCache {
   private final Map<String, double[]> _columnToHashCodesMap = new HashMap<>();
   private final Map<String, String[]> _columnToStringsMap = new HashMap<>();
 
+  private final Map<String, int[][]> _columnToDictIdsArrayMap = new HashMap<>();
+  private final Map<String, double[][]> _columnToValuesArrayMap = new HashMap<>();
+  private final Map<String, double[][]> _columnToHashCodesArrayMap = new HashMap<>();
+  private final Map<String, String[][]> _columnToStringsArrayMap = new HashMap<>();
+
   private int[] _docIds;
   private int _startPos;
   private int _length;
@@ -52,7 +58,7 @@ public class SingleValueBlockCache {
    *
    * @param dataFetcher data fetcher associated with the index segment.
    */
-  public SingleValueBlockCache(DataFetcher dataFetcher) {
+  public SingleMultiValueBlockCache(DataFetcher dataFetcher) {
     _dataFetcher = dataFetcher;
   }
 
@@ -95,6 +101,26 @@ public class SingleValueBlockCache {
   }
 
   /**
+   * Get an arrary of array representation for dictionary ids for a given column for the
+   * specific block initialized in the initNewBlock.
+   *
+   * @param column column name.
+   * @return dictionary id array array associated with this column.
+   */
+  private int[][] getDictIdArrayArrayForColumn(String column) {
+    int[][] dictIdsArray = _columnToDictIdsArrayMap.get(column);
+    if (!_columnDictIdLoaded.contains(column)) {
+      if (dictIdsArray == null) {
+        dictIdsArray = new int[DocIdSetPlanNode.MAX_DOC_PER_CALL][];
+        _columnToDictIdsArrayMap.put(column, dictIdsArray);
+      }
+      _dataFetcher.fetchMultiValueDictIds(column, _docIds, _startPos, _length, dictIdsArray, 0);
+      _columnDictIdLoaded.add(column);
+    }
+    return dictIdsArray;
+  }
+
+  /**
    * Get double value array for a given column for the specific block initialized in the initNewBlock.
    *
    * @param column column name.
@@ -112,6 +138,31 @@ public class SingleValueBlockCache {
       _columnValueLoaded.add(column);
     }
     return doubleValues;
+  }
+
+  /**
+   * Get double value array for a given column for the specific block initialized in the initNewBlock.
+   *
+   * @param column column name.
+   * @return value array associated with this column.
+   */
+  public double[][] getDoubleValueArrayArrayForColumn(String column) {
+    double[][] doubleValueArrayArray = _columnToValuesArrayMap.get(column);
+    if (!_columnValueLoaded.contains(column)) {
+      if (doubleValueArrayArray == null) {
+        doubleValueArrayArray = new double[DocIdSetPlanNode.MAX_DOC_PER_CALL][];
+        _columnToValuesArrayMap.put(column, doubleValueArrayArray);
+      }
+      int[][] dictIdsArray = getDictIdArrayArrayForColumn(column);
+      for (int pos = 0; pos < _length; ++pos) {
+        int[] dictIds = dictIdsArray[pos];
+        double[] doubleValues = new double[dictIds.length];
+        _dataFetcher.fetchSingleDoubleValues(column, dictIds, 0, dictIds.length, doubleValues, 0);
+        doubleValueArrayArray[pos] = doubleValues;
+      }
+      _columnValueLoaded.add(column);
+    }
+    return doubleValueArrayArray;
   }
 
   /**
@@ -135,6 +186,32 @@ public class SingleValueBlockCache {
   }
 
   /**
+   * Get hash code array for a given column for the specific block initialized in the initNewBlock.
+   *
+   * @param column column name.
+   * @return hash code array associated with this column.
+   */
+  public double[][] getHashCodeArrayArrayForColumn(String column) {
+    double[][] hashCodesArray = _columnToHashCodesArrayMap.get(column);
+    if (!_columnHashCodeLoaded.contains(column)) {
+      if (hashCodesArray == null) {
+        hashCodesArray = new double[DocIdSetPlanNode.MAX_DOC_PER_CALL][];
+        _columnToHashCodesArrayMap.put(column, hashCodesArray);
+      }
+      int[][] dictIdsArray = getDictIdArrayArrayForColumn(column);
+      for (int pos = 0; pos < _length; ++pos) {
+        int[] dictIds = dictIdsArray[pos];
+        double[] hashCodes = new double[dictIds.length];
+        _dataFetcher.fetchSingleHashCodes(column, dictIds, 0, dictIds.length, hashCodes, 0);
+        hashCodesArray[pos] = hashCodes;
+
+      }
+      _columnHashCodeLoaded.add(column);
+    }
+    return hashCodesArray;
+  }
+
+  /**
    * Get string value array for a given column for the specific block initialized in the initNewBlock.
    *
    * @param column column name.
@@ -152,6 +229,31 @@ public class SingleValueBlockCache {
       _columnStringLoaded.add(column);
     }
     return stringValues;
+  }
+
+  /**
+   * Get string value array for a given column for the specific block initialized in the initNewBlock.
+   *
+   * @param column column name.
+   * @return value array associated with this column.
+   */
+  public String[][] getStringValueArrayArrayForColumn(String column) {
+    String[][] stringsArray = _columnToStringsArrayMap.get(column);
+    if (!_columnHashCodeLoaded.contains(column)) {
+      if (stringsArray == null) {
+        stringsArray = new String[DocIdSetPlanNode.MAX_DOC_PER_CALL][];
+        _columnToStringsArrayMap.put(column, stringsArray);
+      }
+      int[][] dictIdsArray = getDictIdArrayArrayForColumn(column);
+      for (int pos = 0; pos < _length; ++pos) {
+        int[] dictIds = dictIdsArray[pos];
+        String[] strings = new String[dictIds.length];
+        _dataFetcher.fetchSingleStringValues(column, dictIds, 0, dictIds.length, strings, 0);
+        stringsArray[pos] = strings;
+      }
+      _columnHashCodeLoaded.add(column);
+    }
+    return stringsArray;
   }
 
 }

@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.linkedin.pinot.core.operator.aggregation.AggregationResultHolder;
 import com.linkedin.pinot.core.operator.aggregation.groupby.GroupByResultHolder;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+
 import java.util.List;
 
 
@@ -57,6 +58,35 @@ public class DistinctCountAggregationFunction implements AggregationFunction {
   }
 
   /**
+   * Performs 'distinctcount' aggregation on the input array.
+   *
+   * {@inheritDoc}
+   *
+   * @param length
+   * @param resultHolder
+   * @param valueArray
+   */
+  @Override
+  public void aggregateMV(int length, AggregationResultHolder resultHolder, Object... valueArray) {
+    Preconditions.checkArgument(valueArray.length == 1);
+    Preconditions.checkArgument(valueArray[0] instanceof double[][]);
+    final double[][] values = (double[][]) valueArray[0];
+    Preconditions.checkState(length <= values.length);
+
+    IntOpenHashSet valueSet = resultHolder.getResult();
+    if (valueSet == null) {
+      valueSet = new IntOpenHashSet();
+      resultHolder.setValue(valueSet);
+    }
+
+    for (int i = 0; i < length; i++) {
+      for (int j = 0; j < values[i].length; ++j) {
+        valueSet.add((int) values[i][j]);
+      }
+    }
+  }
+
+  /**
    * {@inheritDoc}
    *
    * While the interface allows for variable number of valueArrays, we do not support
@@ -70,6 +100,14 @@ public class DistinctCountAggregationFunction implements AggregationFunction {
   @Override
   public void aggregateGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray.length == 1);
+    if (valueArray[0] instanceof double[][]) {
+      aggregateMVGroupBySV(length, groupKeys, resultHolder, valueArray);
+    } else {
+      aggregateSVGroupBySV(length, groupKeys, resultHolder, valueArray);
+    }
+  }
+
+  private void aggregateSVGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray[0] instanceof double[]);
     final double[] values = (double[]) valueArray[0];
     Preconditions.checkState(length <= values.length);
@@ -88,6 +126,33 @@ public class DistinctCountAggregationFunction implements AggregationFunction {
   /**
    * {@inheritDoc}
    *
+   * While the interface allows for variable number of valueArrays, we do not support
+   * multiple columns within one aggregation function right now.
+   *
+   * @param length
+   * @param groupKeys
+   * @param resultHolder
+   * @param valueArray
+   */
+  private void aggregateMVGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
+    final double[][] values = (double[][]) valueArray[0];
+    Preconditions.checkState(length <= values.length);
+    for (int i = 0; i < length; i++) {
+      int groupKey = groupKeys[i];
+      IntOpenHashSet valueSet = resultHolder.getResult(groupKey);
+      if (valueSet == null) {
+        valueSet = new IntOpenHashSet();
+        resultHolder.setValueForKey(groupKey, valueSet);
+      }
+      for (double value : values[i]) {
+        valueSet.add((int) value);
+      }
+    }
+  }
+
+  /**
+   * {@inheritDoc}
+   *
    * @param length
    * @param docIdToGroupKeys
    * @param resultHolder
@@ -97,6 +162,14 @@ public class DistinctCountAggregationFunction implements AggregationFunction {
   public void aggregateGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder,
       Object... valueArray) {
     Preconditions.checkArgument(valueArray.length == 1);
+    if (valueArray[0] instanceof double[][]) {
+      aggregateMVGroupByMV(length, docIdToGroupKeys, resultHolder, valueArray);
+    } else {
+      aggregateSVGroupByMV(length, docIdToGroupKeys, resultHolder, valueArray);
+    }
+  }
+
+  private void aggregateSVGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray[0] instanceof double[]);
     final double[] values = (double[]) valueArray[0];
     Preconditions.checkState(length <= values.length);
@@ -110,6 +183,31 @@ public class DistinctCountAggregationFunction implements AggregationFunction {
           resultHolder.setValueForKey(groupKey, valueSet);
         }
         valueSet.add(value);
+      }
+    }
+  }
+
+  /**
+   * {@inheritDoc}
+   *
+   * @param length
+   * @param docIdToGroupKeys
+   * @param resultHolder
+   * @param valueArrayArray
+   */
+  private void aggregateMVGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
+    final double[][] values = (double[][]) valueArray[0];
+    Preconditions.checkState(length <= values.length);
+    for (int i = 0; i < length; i++) {
+      for (int groupKey : docIdToGroupKeys[i]) {
+        IntOpenHashSet valueSet = resultHolder.getResult(groupKey);
+        if (valueSet == null) {
+          valueSet = new IntOpenHashSet();
+          resultHolder.setValueForKey(groupKey, valueSet);
+        }
+        for (double value : values[i]) {
+          valueSet.add((int) value);
+        }
       }
     }
   }

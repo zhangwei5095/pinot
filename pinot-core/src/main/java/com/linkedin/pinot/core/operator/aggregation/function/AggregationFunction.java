@@ -47,6 +47,15 @@ public interface AggregationFunction {
   void aggregate(int length, AggregationResultHolder resultHolder, Object... valueArray);
 
   /**
+   * Performs aggregation on the input array of array of values.
+   *
+   * @param length
+   * @param resultHolder
+   * @param valueArrayArray
+   */
+  void aggregateMV(int length, AggregationResultHolder resultHolder, Object... valueArrayArray);
+
+  /**
    * Perform a group-by aggregation on the given set of values, and the group key to which
    * each index corresponds to. This method is for single-valued group by column(s) case, where
    * each docId has only one group key. This mapping is passed in via the docIdToGroupKey parameter.

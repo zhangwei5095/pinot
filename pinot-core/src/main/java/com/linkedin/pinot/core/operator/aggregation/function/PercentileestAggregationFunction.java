@@ -79,6 +79,35 @@ public class PercentileestAggregationFunction implements AggregationFunction {
   }
 
   /**
+   * Performs 'percentileest' aggregation on the input array.
+   *
+   * {@inheritDoc}
+   *
+   * @param length
+   * @param resultHolder
+   * @param valueArrayArray
+   */
+  @Override
+  public void aggregateMV(int length, AggregationResultHolder resultHolder, Object... valueArrayArray) {
+    Preconditions.checkArgument(valueArrayArray.length == 1);
+    Preconditions.checkArgument(valueArrayArray[0] instanceof double[][]);
+    final double[][] values = (double[][]) valueArrayArray[0];
+    Preconditions.checkState(length <= values.length);
+
+    QuantileDigest digest = resultHolder.getResult();
+    if (digest == null) {
+      digest = new QuantileDigest(DEFAULT_MAX_ERROR);
+      resultHolder.setValue(digest);
+    }
+
+    for (int i = 0; i < length; i++) {
+      for (int j = 0; j < values[i].length; ++j) {
+        digest.add((long) values[i][j]);
+      }
+    }
+  }
+
+  /**
    * {@inheritDoc}
    *
    * While the interface allows for variable number of valueArrays, we do not support
@@ -92,6 +121,14 @@ public class PercentileestAggregationFunction implements AggregationFunction {
   @Override
   public void aggregateGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray.length == 1);
+    if (valueArray[0] instanceof double[][]) {
+      aggregateMVGroupBySV(length, groupKeys, resultHolder, valueArray);
+    } else {
+      aggregateSVGroupBySV(length, groupKeys, resultHolder, valueArray);
+    }
+  }
+
+  private void aggregateSVGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray[0] instanceof double[]);
     final double[] values = (double[]) valueArray[0];
     Preconditions.checkState(length <= values.length);
@@ -107,6 +144,23 @@ public class PercentileestAggregationFunction implements AggregationFunction {
     }
   }
 
+  private void aggregateMVGroupBySV(int length, int[] groupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
+    final double[][] values = (double[][]) valueArray[0];
+    Preconditions.checkState(length <= values.length);
+
+    for (int i = 0; i < length; i++) {
+      int groupKey = groupKeys[i];
+      QuantileDigest digest = resultHolder.getResult(groupKey);
+      if (digest == null) {
+        digest = new QuantileDigest(DEFAULT_MAX_ERROR);
+        resultHolder.setValueForKey(groupKey, digest);
+      }
+      for (double value : values[i]) {
+        digest.add((long) value);
+      }
+    }
+  }
+
   /**
    * {@inheritDoc}
    *
@@ -119,6 +173,14 @@ public class PercentileestAggregationFunction implements AggregationFunction {
   public void aggregateGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder,
       Object... valueArray) {
     Preconditions.checkArgument(valueArray.length == 1);
+    if (valueArray[0] instanceof double[][]) {
+      aggregateMVGroupByMV(length, docIdToGroupKeys, resultHolder, valueArray);
+    } else {
+      aggregateSVGroupByMV(length, docIdToGroupKeys, resultHolder, valueArray);
+    }
+  }
+
+  private void aggregateSVGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
     Preconditions.checkArgument(valueArray[0] instanceof double[]);
     final double[] values = (double[]) valueArray[0];
     Preconditions.checkState(length <= values.length);
@@ -132,6 +194,24 @@ public class PercentileestAggregationFunction implements AggregationFunction {
           resultHolder.setValueForKey(groupKey, digest);
         }
         digest.add(value);
+      }
+    }
+  }
+
+  private void aggregateMVGroupByMV(int length, int[][] docIdToGroupKeys, GroupByResultHolder resultHolder, Object... valueArray) {
+    final double[][] values = (double[][]) valueArray[0];
+    Preconditions.checkState(length <= values.length);
+
+    for (int i = 0; i < length; i++) {
+      for (double value : values[i]) {
+        for (int groupKey : docIdToGroupKeys[i]) {
+          QuantileDigest digest = resultHolder.getResult(groupKey);
+          if (digest == null) {
+            digest = new QuantileDigest(DEFAULT_MAX_ERROR);
+            resultHolder.setValueForKey(groupKey, digest);
+          }
+          digest.add((long) value);
+        }
       }
     }
   }
